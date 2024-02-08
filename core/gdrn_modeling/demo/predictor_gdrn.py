@@ -13,21 +13,13 @@ import datetime
 
 #from core.gdrn_modeling.main_gdrn import Lite
 from core.gdrn_modeling.engine.engine_utils import get_out_mask, get_out_coor, batch_data_inference_roi
-from core.gdrn_modeling.engine.gdrn_evaluator import get_pnp_ransac_pose
 from core.utils.my_checkpoint import MyCheckpointer
 from core.utils.data_utils import crop_resize_by_warp_affine, get_2d_coord_np
-from lib.vis_utils.image import vis_image_mask_bbox_cv2, vis_image_bboxes_cv2, vis_image_mask_cv2
 from lib.utils.utils import iprint
 from lib.utils.time_utils import get_time_str
 from lib.utils.config_utils import try_get_key
-from lib.pysixd import inout, misc
-from lib.render_vispy.renderer import Renderer
-from lib.render_vispy.model3d import load_models
 
 from detectron2.structures import BoxMode
-from detectron2.evaluation import inference_context
-from detectron2.layers import paste_masks_in_image
-from torch.cuda.amp import autocast
 
 from types import SimpleNamespace
 from setproctitle import setproctitle
@@ -128,18 +120,6 @@ class GdrnPredictor():
         self.model.eval()
         self.model.cuda()
 
-        # If use depth, prepare renderer model
-        if self.cfg.TEST.USE_DEPTH_REFINE:
-            self.ren = Renderer(size=(64, 64), cam=self.cam)
-            self.ren_models = load_models(
-                model_paths=[os.path.join(self.objs_dir, f"obj_{i:06d}.ply") for i in self.objs.keys()],
-                scale_to_meter=self.args.vertex_scale,
-                cache_dir=".cache",
-                texture_paths=None,
-                center=False,
-                use_cache=False,
-            )
-
 
     def inference(self, data_dict):
         """
@@ -163,52 +143,6 @@ class GdrnPredictor():
             )
 
         return out_dict
-
-    def postprocessing(self, data_dict, out_dict):
-        """
-        Postprocess the gdrn model outputs
-        Args:
-            data_dict: gdrn model preprocessed data
-            out_dict: gdrn model output
-        Returns:
-            dict: poses of objects
-        """
-        i_out = -1
-        data_dict["cur_res"] = []
-        for i_inst in range(len(data_dict["roi_img"])):
-
-            i_out += 1
-
-            cur_obj_id = self.obj_ids[int(data_dict["roi_cls"][i_out])]
-            cur_res = {
-                "obj_id": cur_obj_id,
-                "score": float(data_dict["score"][i_inst]),
-                "bbox_est": data_dict["bbox_est"][i_inst].detach().cpu().numpy(),  # xyxy
-            }
-            if self.cfg.TEST.USE_PNP:
-                pose_est_pnp = get_pnp_ransac_pose(self.cfg, data_dict, out_dict, i_inst, i_out)
-                cur_res["R"] = pose_est_pnp[:3, :3]
-                cur_res["t"] = pose_est_pnp[:3, 3]
-            else:
-                cur_res.update(
-                    {
-                        "R": out_dict["rot"][i_out].detach() .cpu().numpy(),
-                        "t": out_dict["trans"][i_out].detach().cpu().numpy(),
-                    }
-                )
-            data_dict["cur_res"].append(cur_res)
-
-        if self.cfg.TEST.USE_DEPTH_REFINE:
-            self.process_depth_refine(data_dict, out_dict)
-
-        poses = {}
-        for res in data_dict["cur_res"]:
-            pose = np.eye(4)
-            pose[:3, :3] = res['R']
-            pose[:3, 3] = res['t']
-            poses[self.objs.get(res['obj_id'])] = pose
-
-        return poses
 
     def process_depth_refine(self, inputs, out_dict):
         """
@@ -577,52 +511,3 @@ class GdrnPredictor():
         ####################################
         # cfg.freeze()
         return cfg
-
-    def gdrn_visualization(self, batch, out_dict, image, frame_count=0):
-        vis_dict = {}
-
-        # for crop and resize
-        bs = batch["roi_cls"].shape[0]
-        tensor_kwargs = {"dtype": torch.float32, "device": "cuda"}
-        rois_xy0 = batch["roi_center"] - batch["scale"].view(bs, -1) / 2  # bx2
-        rois_xy1 = batch["roi_center"] + batch["scale"].view(bs, -1) / 2  # bx2
-        batch["inst_rois"] = torch.cat([torch.arange(bs, **tensor_kwargs).view(-1, 1), rois_xy0, rois_xy1], dim=1)
-
-        im_H = int(batch["im_H"][0])
-        im_W = int(batch["im_W"][0])
-        if "full_mask" in out_dict:
-            raw_full_masks = out_dict["full_mask"]
-            full_mask_probs = get_out_mask(self.cfg, raw_full_masks)
-            full_masks_in_im = paste_masks_in_image(
-                full_mask_probs[:, 0, :, :],
-                batch["inst_rois"][:, 1:5],
-                image_shape=(im_H, im_W),
-                threshold=0.5,
-            )
-            full_masks_np = full_masks_in_im.detach().to(torch.uint8).cpu().numpy()
-
-            img_vis_full_mask = vis_image_mask_bbox_cv2(
-                image,
-                [full_masks_np[i] for i in range(bs)],
-                [batch["bbox_est"][i].detach().cpu().numpy() for i in range(bs)],
-                labels=self.cls_names,
-            )
-
-            vis_dict[f"im_det_and_mask_full"] = img_vis_full_mask[:, :, ::-1]
-
-        for i in range(bs):
-            R = batch["cur_res"][i]["R"]
-            t = batch["cur_res"][i]["t"]
-            # pose_est = np.hstack([R, t.reshape(3, 1)])
-            proj_pts_est = misc.project_pts(self.obj_models[i+1]["pts"], self.cam, R, t)
-            mask_pose_est = misc.points2d_to_mask(proj_pts_est, im_H, im_W)
-            image_mask_pose_est = vis_image_mask_cv2(image, mask_pose_est, color="yellow" if i == 0 else "blue")
-            image_mask_pose_est = vis_image_bboxes_cv2(
-                image_mask_pose_est,
-                [batch["bbox_est"][i].detach().cpu().numpy()],
-                labels=[self.cls_names[i]]
-            )
-            vis_dict[f"im_{i}_mask_pose_est"] = image_mask_pose_est[:, :, ::-1]
-        print(f"vis_dict.items() : {vis_dict.items()}")
-        show_ims = np.hstack([cv2.cvtColor(_v, cv2.COLOR_BGR2RGB) for _k, _v in vis_dict.items()])
-        return show_ims

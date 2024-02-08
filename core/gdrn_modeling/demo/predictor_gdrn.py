@@ -11,7 +11,7 @@ import cv2
 import json
 import datetime
 
-from core.gdrn_modeling.main_gdrn import Lite
+#from core.gdrn_modeling.main_gdrn import Lite
 from core.gdrn_modeling.engine.engine_utils import get_out_mask, get_out_coor, batch_data_inference_roi
 from core.gdrn_modeling.engine.gdrn_evaluator import get_pnp_ransac_pose
 from core.utils.my_checkpoint import MyCheckpointer

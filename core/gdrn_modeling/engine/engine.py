@@ -25,8 +25,8 @@ from detectron2.evaluation import (
 
 from detectron2.data.common import AspectRatioGroupedDataset
 from detectron2.data import MetadataCatalog
-from pytorch_lightning.lite import LightningLite  # import LightningLite
-
+# from pytorch_lightning.lite import LightningLite  # import LightningLite
+import pytorch_lightning as Lightning
 from lib.utils.setup_logger import log_first_n
 from lib.utils.utils import dprint
 from lib.vis_utils.image import grid_show, vis_bbox_opencv
@@ -49,7 +49,7 @@ import ref
 logger = logging.getLogger(__name__)
 
 
-class GDRN_Lite(LightningLite):
+class GDRN_Lite(Lightning):
     def get_evaluator(self, cfg, dataset_name, output_folder=None):
         """Create evaluator(s) for a given dataset.
 

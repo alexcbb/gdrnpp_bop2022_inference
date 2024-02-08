@@ -19,7 +19,7 @@ from detectron2.evaluation import DatasetEvaluator
 from tabulate import tabulate
 from tqdm import tqdm
 from transforms3d.quaternions import quat2mat
-from pytorch_lightning.lite import LightningLite
+#from pytorch_lightning.lite import LightningLite
 
 cur_dir = osp.dirname(osp.abspath(__file__))
 import ref

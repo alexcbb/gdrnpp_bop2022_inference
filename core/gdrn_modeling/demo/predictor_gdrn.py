@@ -15,6 +15,7 @@ import datetime
 from core.gdrn_modeling.engine.engine_utils import get_out_mask, get_out_coor, batch_data_inference_roi
 from core.utils.my_checkpoint import MyCheckpointer
 from core.utils.data_utils import crop_resize_by_warp_affine, get_2d_coord_np
+from core.utils import inout
 from lib.utils.utils import iprint
 from lib.utils.time_utils import get_time_str
 from lib.utils.config_utils import try_get_key

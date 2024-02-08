@@ -19,8 +19,6 @@ import numpy as np
 from lib.pysixd import inout
 from core.utils.data_utils import crop_resize_by_warp_affine, get_2d_coord_np
 from detectron2.structures import BoxMode
-from lib.utils.mask_utils import get_edge
-import mmcv
 
 def preprocessing(outputs, image, extents, cam):
     """

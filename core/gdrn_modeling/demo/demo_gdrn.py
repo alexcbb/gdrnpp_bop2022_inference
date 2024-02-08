@@ -11,7 +11,6 @@ import os
 import datetime
 
 import numpy as np
-import copy
 
 import cv2
 import torch 
@@ -23,8 +22,6 @@ from detectron2.structures import BoxMode
 from lib.egl_renderer.egl_renderer_v3 import EGLRenderer
 from lib.utils.mask_utils import get_edge
 import mmcv
-from core.gdrn_modeling.engine.gdrn_evaluator import get_pnp_ransac_pose
-import threading
 
 IMAGE_EXT = [".jpg", ".jpeg", ".webp", ".bmp", ".png"]
 def get_image_list(rgb_images_path, depth_images_path=None):

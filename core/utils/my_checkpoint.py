@@ -18,7 +18,7 @@ from timm.models.helpers import (
 )
 from torch.nn.modules.utils import consume_prefix_in_state_dict_if_present
 from torch.nn.parallel import DataParallel, DistributedDataParallel
-from pytorch_lightning.lite.wrappers import _LiteModule
+# from pytorch_lightning.lite.wrappers import _LiteModule
 from fairscale.nn.data_parallel.sharded_ddp import ShardedDataParallel
 
 
@@ -33,7 +33,7 @@ class MyCheckpointer(DetectionCheckpointer):
 
     def __init__(self, model, save_dir="", *, save_to_disk=None, prefix_to_remove=None, **checkpointables):
         # HACK: deal with lite model
-        while isinstance(model, (DistributedDataParallel, DataParallel, _LiteModule, ShardedDataParallel)):
+        while isinstance(model, (DistributedDataParallel, DataParallel)):#, _LiteModule, ShardedDataParallel)):
             model = model.module
 
         super().__init__(

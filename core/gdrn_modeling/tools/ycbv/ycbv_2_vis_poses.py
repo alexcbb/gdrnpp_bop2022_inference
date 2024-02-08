@@ -80,9 +80,11 @@ ren = EGLRenderer(
 )
 
 # NOTE: this is for ycbv_bop_test
-pred_path = "output/gdrn/ycbv/a6_cPnP_AugAAETrunc_BG0.5_ycbv_real_pbr_visib20_20e_allObjs/a6-cPnP-AugAAETrunc-BG0.5-ycbv-real-pbr-visib20-20e-singleObjMerged-bop-test-iter0_ycbv-test.csv"
+pred_path = "/home/achapin/Documents/gdrnpp_bop2022/output/gdrn/ycbv/convnext_a6_AugCosyAAEGray_BG05_mlL1_DMask_amodalClipBox_classAware_ycbv/inference_model_final_wo_optim/ycbv_test/convnext-a6-AugCosyAAEGray-BG05-mlL1-DMask-amodalClipBox-classAware-ycbv-test-iter0_ycbv-test.csv"
 
-vis_dir = "output/gdrn/ycbv/a6_cPnP_AugAAETrunc_BG0.5_ycbv_real_pbr_visib20_20e_allObjs/ycbv_test_keyframe/vis_gt_pred"
+#"output/gdrn/ycbv/a6_cPnP_AugAAETrunc_BG0.5_ycbv_real_pbr_visib20_20e_allObjs/a6-cPnP-AugAAETrunc-BG0.5-ycbv-real-pbr-visib20-20e-singleObjMerged-bop-test-iter0_ycbv-test.csv"
+
+vis_dir = "output/gdrn/ycbv/vis_gt_pred"
 mmcv.mkdir_or_exist(vis_dir)
 
 print(pred_path)

@@ -70,13 +70,13 @@ def save_and_eval_results(cfg, results_all, output_dir, obj_ids=None):
         if subprocess.call(eval_cmd) != 0:
             logger.warning("evaluation failed.")
 
-        load_and_print_val_scores_tab(
-            cfg,
-            eval_root=save_root,
-            result_names=result_names,
-            error_types=cfg.VAL.ERROR_TYPES.split(","),
-            obj_ids=obj_ids,
-        )
+        # load_and_print_val_scores_tab(
+        #     cfg,
+        #     eval_root=save_root,
+        #     result_names=result_names,
+        #     error_types=cfg.VAL.ERROR_TYPES.split(","),
+        #     obj_ids=obj_ids,
+        # )
         logger.info("eval time: {}s".format(time.perf_counter() - eval_time))
 
 

@@ -28,6 +28,7 @@ from .pose_from_pred_centroid_z import pose_from_pred_centroid_z
 from .pose_from_pred_centroid_z_abs import pose_from_pred_centroid_z_abs
 from .net_factory import BACKBONES
 from core.utils.my_checkpoint import load_timm_pretrained
+import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,13 @@ class GDRN_DoubleMask(nn.Module):
             for loss_name in self.loss_names:
                 self.register_parameter(
                     f"log_var_{loss_name}", nn.Parameter(torch.tensor([0.0], requires_grad=True, dtype=torch.float32))
-                )
+                )            
+        # TODO : make it a proper way
+        num_classes = cfg.MODEL.POSE_NET.NUM_CLASSES
+        self.arranges = {}
+        for i in range(num_classes+1):
+            self.arranges[i] = torch.arange(i).to("cuda")
+
         # yapf: enable
 
     def forward(
@@ -93,7 +100,6 @@ class GDRN_DoubleMask(nn.Module):
         g_head_cfg = net_cfg.GEO_HEAD
         pnp_net_cfg = net_cfg.PNP_NET
 
-        device = x.device
         bs = x.shape[0]
         num_classes = net_cfg.NUM_CLASSES
         out_res = net_cfg.OUTPUT_RES
@@ -104,26 +110,34 @@ class GDRN_DoubleMask(nn.Module):
             conv_feat = self.neck(conv_feat)
         vis_mask, full_mask, coor_x, coor_y, coor_z, region = self.geo_head_net(conv_feat)
 
+        # TODO : fix the bottleneck here
+        coor_x = coor_x.contiguous()
+        coor_y = coor_y.contiguous()
+        coor_z = coor_z.contiguous()
+        vis_mask = vis_mask.contiguous()
+        full_mask = full_mask.contiguous()
+        region = region.contiguous()
+        
         if g_head_cfg.XYZ_CLASS_AWARE:
             assert roi_classes is not None
             coor_x = coor_x.view(bs, num_classes, self.xyz_out_dim // 3, out_res, out_res)
-            coor_x = coor_x[torch.arange(bs).to(device), roi_classes]
+            coor_x = coor_x[self.arranges[bs], roi_classes]
             coor_y = coor_y.view(bs, num_classes, self.xyz_out_dim // 3, out_res, out_res)
-            coor_y = coor_y[torch.arange(bs).to(device), roi_classes]
+            coor_y = coor_y[self.arranges[bs], roi_classes]
             coor_z = coor_z.view(bs, num_classes, self.xyz_out_dim // 3, out_res, out_res)
-            coor_z = coor_z[torch.arange(bs).to(device), roi_classes]
+            coor_z = coor_z[self.arranges[bs], roi_classes]
 
         if g_head_cfg.MASK_CLASS_AWARE:
             assert roi_classes is not None
             vis_mask = vis_mask.view(bs, num_classes, self.mask_out_dim // 2, out_res, out_res)
-            vis_mask = vis_mask[torch.arange(bs).to(device), roi_classes]
+            vis_mask = vis_mask[self.arranges[bs], roi_classes]
             full_mask = full_mask.view(bs, num_classes, self.mask_out_dim // 2, out_res, out_res)
-            full_mask = full_mask[torch.arange(bs).to(device), roi_classes]
-
+            full_mask = full_mask[self.arranges[bs], roi_classes]
+            
         if g_head_cfg.REGION_CLASS_AWARE:
             assert roi_classes is not None
             region = region.view(bs, num_classes, self.region_out_dim, out_res, out_res)
-            region = region[torch.arange(bs).to(device), roi_classes]
+            region = region[self.arranges[bs], roi_classes]
 
         # -----------------------------------------------
         # get rot and trans from pnp_net
@@ -148,17 +162,19 @@ class GDRN_DoubleMask(nn.Module):
         region_softmax = F.softmax(region[:, 1:, :, :], dim=1)
 
         mask_atten = None
-        if pnp_net_cfg.MASK_ATTENTION != "none":
-            mask_atten = get_mask_prob(vis_mask, mask_loss_type=net_cfg.LOSS_CFG.MASK_LOSS_TYPE)
+        # if pnp_net_cfg.MASK_ATTENTION != "none":
+        #     mask_atten = get_mask_prob(vis_mask, mask_loss_type=net_cfg.LOSS_CFG.MASK_LOSS_TYPE)
 
         region_atten = None
         if pnp_net_cfg.REGION_ATTENTION:
             region_atten = region_softmax
 
+
         pred_rot_, pred_t_ = self.pnp_net(
             coor_feat, region=region_atten, extents=roi_extents, mask_attention=mask_atten
         )
 
+                  
         # convert pred_rot to rot mat -------------------------
         rot_type = pnp_net_cfg.ROT_TYPE
         pred_rot_m = get_rot_mat(pred_rot_, rot_type)
@@ -176,8 +192,8 @@ class GDRN_DoubleMask(nn.Module):
                 eps=1e-4,
                 is_allo="allo" in rot_type,
                 z_type=pnp_net_cfg.Z_TYPE,
-                # is_train=True
-                is_train=do_loss,  # TODO: sometimes we need it to be differentiable during test
+                is_train=True,  # TODO: sometimes we need it to be differentiable during test
+                # is_train=do_loss,
             )
         elif pnp_net_cfg.TRANS_TYPE == "centroid_z_abs":
             # abs 2d obj center and abs z
@@ -282,6 +298,7 @@ class GDRN_DoubleMask(nn.Module):
             storage.put_scalars(**vis_dict)
 
             return out_dict, loss_dict
+        
         return out_dict
 
     def gdrn_loss(

@@ -10,7 +10,7 @@ from core.utils.utils import (
 from lib.pysixd import RT_transform
 from core.utils.pose_utils import quat2mat_torch
 from lib.utils.utils import dprint
-
+import datetime
 
 def pose_from_pred_centroid_z(
     pred_rots,
@@ -227,7 +227,6 @@ def pose_from_predictions_train(
         ],
         dim=1,
     )
-
     if pred_rots.ndim == 2 and pred_rots.shape[-1] == 4:
         pred_quats = pred_rots
         quat_allo = pred_quats / (torch.norm(pred_quats, dim=1, keepdim=True) + eps)
@@ -238,7 +237,7 @@ def pose_from_predictions_train(
         rot_ego = quat2mat_torch(quat_ego)
     if pred_rots.ndim == 3 and pred_rots.shape[-1] == 3:  # Nx3x3
         if is_allo:
-            rot_ego = allo_to_ego_mat_torch(translation, pred_rots, eps=eps)
+            rot_ego = allo_to_ego_mat_torch(translation, pred_rots.float(), eps=eps)
         else:
             rot_ego = pred_rots
     return rot_ego, translation

@@ -5,6 +5,10 @@ from transforms3d.axangles import axangle2mat
 from transforms3d.quaternions import axangle2quat, mat2quat, qmult, quat2mat
 from .pose_utils import quat2mat_torch
 from detectron2.layers import cat
+import datetime
+
+# TOOD :make it better
+cam_ray = torch.tensor([0.0, 0.0, 1.0], dtype=float, device="cuda:0")  # (3,)
 
 
 def normalize_to_01(img):
@@ -204,7 +208,7 @@ def allo_to_ego_mat_torch(translation, rot_allo, eps=1e-4):
         rot_allo: Nx3x3
     """
     # Compute rotation between ray to object centroid and optical center ray
-    cam_ray = torch.tensor([0, 0, 1.0], dtype=translation.dtype, device=translation.device)  # (3,)
+    # cam_ray = torch.tensor([0.0, 0.0, 1.0], dtype=translation.dtype, device=translation.device)  # (3,)
     obj_ray = translation / (torch.norm(translation, dim=1, keepdim=True) + eps)
 
     # cam_ray.dot(obj_ray), assume cam_ray: (0, 0, 1)
@@ -227,5 +231,5 @@ def allo_to_ego_mat_torch(translation, rot_allo, eps=1e-4):
     )
     rot_allo_to_ego = quat2mat_torch(q_allo_to_ego)
     # Apply quaternion for transformation from allocentric to egocentric.
-    rot_ego = torch.matmul(rot_allo_to_ego, rot_allo)
+    rot_ego = torch.matmul(rot_allo_to_ego.float(), rot_allo)
     return rot_ego

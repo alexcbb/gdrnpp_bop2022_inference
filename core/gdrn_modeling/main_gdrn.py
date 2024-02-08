@@ -16,7 +16,7 @@ from detectron2.data import MetadataCatalog
 from mmcv import Config
 import cv2
 from pytorch_lightning import seed_everything
-from pytorch_lightning.lite import LightningLite  # import LightningLite
+# from pytorch_lightning.lite import LightningLite  # import LightningLite
 
 cv2.setNumThreads(0)  # pytorch issue 1355: possible deadlock in dataloader
 # OpenCL may be enabled by default in OpenCV3; disable it because it's not

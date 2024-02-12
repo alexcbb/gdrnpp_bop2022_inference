@@ -1,3 +1,6 @@
+
+#!/usr/bin/env python
+
 import os.path as osp
 import sys
 cur_dir = osp.dirname(osp.abspath(__file__))
@@ -19,6 +22,16 @@ import numpy as np
 from lib.pysixd import inout
 from core.utils.data_utils import crop_resize_by_warp_affine, get_2d_coord_np
 from detectron2.structures import BoxMode
+
+import copy
+import rospy
+import message_filters
+from sensor_msgs.msg import Image
+from geometry_msgs.msg import Pose, PoseStamped
+from cv_bridge import CvBridge, CvBridgeError
+from scipy.spatial.transform import Rotation
+
+import mmcv
 
 def preprocessing(outputs, image, extents, cam):
     """
@@ -206,8 +219,57 @@ def postprocessing(out_dict, objs, outputs):
 
     return poses
 
+class ImageDataHandler:
+    def __init__(self):
+        self.imageRGB = Image
+        self.imageDepth = Image
+        self.updatedImages = False
 
-if __name__ == "__main__":
+        # Subscribe to topics
+        ## Make a handle to both image topics and put them in a message filter
+        self.topicImageRGB = message_filters.Subscriber("/zedm/zed_node/rgb/image_rect_color", Image)
+        self.topicImageDepth = message_filters.Subscriber("/zedm/zed_node/depth/depth_registered", Image)
+
+        ## Use message filter to connect two callbacks to one function
+        self.ts = message_filters.ApproximateTimeSynchronizer([self.topicImageRGB, self.topicImageDepth], queue_size=4, slop=0.2, allow_headerless=True)
+        self.ts.registerCallback( self.callback )
+    
+    def getCameraInfo(self):
+        pass
+
+    def callback(self, imageRGB, imageDepth):
+        self.imageRGB = imageRGB
+        self.imageDepth = imageDepth
+        self.updatedImages = True
+        return
+
+    def getImages(self):
+        self.updatedImages = False
+        return self.imageRGB, self.imageDepth
+
+    def available(self):
+        return self.updatedImages
+
+def draw_axis(img, R, t, K, object_name):
+    rotV, _ = cv2.Rodrigues(R)
+    points = np.float32([[0.1, 0, 0], [0, 0.1, 0], [0, 0, 0.1], [0, 0, 0]]).reshape(-1, 3)
+    axisPoints, _ = cv2.projectPoints(points, rotV, t, K, (0, 0, 0, 0))
+    axisPoints = axisPoints.astype(dtype=int)
+    img = cv2.line(img, tuple(axisPoints[3].ravel()), tuple(axisPoints[0].ravel()), (255,0,0), 2)
+    img = cv2.line(img, tuple(axisPoints[3].ravel()), tuple(axisPoints[1].ravel()), (0,255,0), 2)
+    img = cv2.line(img, tuple(axisPoints[3].ravel()), tuple(axisPoints[2].ravel()), (0,0,255), 2)
+
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    org = tuple(axisPoints[0].ravel())
+    fontScale = 0.5
+    color = (255, 255, 255)  # White color
+    thickness = 1
+    img = cv2.putText(img, object_name, org, font, fontScale, color, thickness, cv2.LINE_AA)
+
+    return img
+
+
+if __name__ == '__main__':
     #image_paths = get_image_list(osp.join(PROJ_ROOT,"datasets/BOP_DATASETS/ycbv/test/000048/rgb"), osp.join(PROJ_ROOT,"datasets/BOP_DATASETS/ycbv/test/000048/depth"))
     yolo_predictor = YoloPredictor(
                        config_file_path=osp.join(PROJ_ROOT,"configs/yolox/bop_pbr/yolox_x_640_augCozyAAEhsv_ranger_30_epochs_ycbv_real_pbr_ycbv_bop_test.py"),
@@ -306,43 +368,66 @@ if __name__ == "__main__":
     extrinsic_matrix = np.array([[1, 0, 0],
                                   [0, 1, 0],
                                   [0, 0, 1]])
-    
-    vid = cv2.VideoCapture(4) #cv2.VideoCapture(0) 
-    while(True): 
-        start = datetime.datetime.now()
-        ret, frame = vid.read() 
-        if ret:
-            outputs = yolo_predictor.inference(image=frame)
-            inference_yolo = datetime.datetime.now()
-            data_dict = preprocessing(outputs=outputs, image=frame, extents=extents, cam=cam)
-            preprocess = datetime.datetime.now()
 
+    # Define pub topic and init
+    pubPose = rospy.Publisher('/liris/pose_estimation/poses', PoseStamped, queue_size=10)
+    pubImage = rospy.Publisher('/liris/pose_estimation/imageRGB', Image, queue_size=10)
+    rospy.init_node('pose_estimator', anonymous=True)
+
+    imageHandler = ImageDataHandler()
+    br = CvBridge()
+
+    # Main loop
+    rate = rospy.Rate(2) # 2hz
+    lopp = 0
+    while not rospy.is_shutdown():
+        ###############################""
+        # Check if images are already published and whether new ones are available
+        if imageHandler.available():
+            # get the images
+            imageRGB, imageDepth = imageHandler.getImages()
+            img = copy.deepcopy(br.imgmsg_to_cv2(imageRGB, desired_encoding = "bgr8"))
+
+            rospy.loginfo(imageRGB.header.seq)
+
+            #####----- publish the poses here -----#####
+            msg = PoseStamped()
+            msg.header = imageRGB.header
+            msg.header.stamp = rospy.Time.now()
+
+            # Extract 6D poses
+            outputs = yolo_predictor.inference(image=img)
+            data_dict = preprocessing(outputs=outputs, image=img, extents=extents, cam=cam)
             out_dict = gdrn_predictor.inference(data_dict)
-            inference_gdrn = datetime.datetime.now()
-
             poses = postprocessing(out_dict, objs, outputs)# gdrn_predictor.postprocessing(data_dict, out_dict)
-            post_process = datetime.datetime.now()
 
-            est_Rs = []
-            est_ts = []
-            est_labels = []
-            for obj_name, pose in poses.items():
-                est_Rs.append(pose[:3, :3])
-                est_ts.append(pose[:3, 3])
-                est_labels.append(objs_name_to_id[obj_name])
+            # Uncomment to visualize !
+            # for obj_name, pose in poses.items():
+            #     img = draw_axis(img, pose[:3, :3], pose[:3, 3], cam, obj_name)
+            # cv2.imshow('Main', img)
+            # # cv2.imshow('YOLO res', vis_res)
+            # if cv2.waitKey(1) & 0xFF == ord('q'): 
+            #     break
+            if len(poses) > 0:
+                for obj_name, pose in poses.items():
+                    obj = PoseStamped()
+                    obj.header.frame_id = f"zedm"
+                    rot = pose[:3, :3]
+                    pos = pose[:3, 3]
+                    rot = Rotation.from_matrix(rot)
+                    quat = rot.as_quat()
+                    obj.pose.position.x = pos[0]
+                    obj.pose.position.y = pos[1]
+                    obj.pose.position.z = pos[2]
+                    obj.pose.orientation.x = quat[0]
+                    obj.pose.orientation.y = quat[1]
+                    obj.pose.orientation.z = quat[2]
+                    obj.pose.orientation.w = quat[3]
+                    pubPose.publish(obj)
 
-            est_poses = [np.hstack([_R, _t.reshape(3, 1)]) for _R, _t in zip(est_Rs, est_ts)]
+            #####---- publish the images with drawings on there -----#####
+            pubImage.publish( br.cv2_to_imgmsg(img, encoding = "bgr8") )
 
-
-            cv2.imshow('Main', frame)
-            # cv2.imshow('YOLO res', vis_res)
-            if cv2.waitKey(1) & 0xFF == ord('q'): 
-                break
-            
-            vis = datetime.datetime.now()
-            print(f"Inference Yolo: {(inference_yolo - start).total_seconds()*1000}ms;\n \
-                Preprocess: {(preprocess - inference_yolo).total_seconds()*1000}ms;\n \
-                Inference GDRN: {(inference_gdrn - preprocess).total_seconds()*1000}ms;\n \
-                Post-process: {(post_process - inference_gdrn).total_seconds()*1000}ms;\n \
-                Visualisation: {(vis - post_process).total_seconds()*1000}ms;\n \
-                Total: {(vis - start).total_seconds()*1000}ms")
+        rate.sleep()
+    
+    cv2.destroyAllWindows()

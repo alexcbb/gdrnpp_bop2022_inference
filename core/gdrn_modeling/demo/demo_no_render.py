@@ -27,7 +27,9 @@ import copy
 import rospy
 import message_filters
 from sensor_msgs.msg import Image
+from std_msgs.msg import String
 from geometry_msgs.msg import Pose, PoseStamped
+from gdrn_modeling.msg import IDPoseArray
 from cv_bridge import CvBridge, CvBridgeError
 from scipy.spatial.transform import Rotation
 
@@ -370,7 +372,9 @@ if __name__ == '__main__':
                                   [0, 0, 1]])
 
     # Define pub topic and init
-    pubPose = rospy.Publisher('/liris/pose_estimation/poses', PoseStamped, queue_size=10)
+    # Define array of strings and poses 
+    pubPoses = rospy.Publisher('/liris/pose_estimation/poses', IDPoseArray, queue_size=10)
+    # pubPose = rospy.Publisher('/liris/pose_estimation/poses', PoseStamped, queue_size=10)
     pubImage = rospy.Publisher('/liris/pose_estimation/imageRGB', Image, queue_size=10)
     rospy.init_node('pose_estimator', anonymous=True)
 
@@ -391,9 +395,10 @@ if __name__ == '__main__':
             rospy.loginfo(imageRGB.header.seq)
 
             #####----- publish the poses here -----#####
-            msg = PoseStamped()
-            msg.header = imageRGB.header
-            msg.header.stamp = rospy.Time.now()
+            idposearray = IDPoseArray()
+            # msg = PoseStamped()
+            idposearray.header = imageRGB.header
+            idposearray.header.stamp = rospy.Time.now()
 
             # Extract 6D poses
             outputs = yolo_predictor.inference(image=img)
@@ -402,29 +407,36 @@ if __name__ == '__main__':
             poses = postprocessing(out_dict, objs, outputs)# gdrn_predictor.postprocessing(data_dict, out_dict)
 
             # Uncomment to visualize !
-            # for obj_name, pose in poses.items():
-            #     img = draw_axis(img, pose[:3, :3], pose[:3, 3], cam, obj_name)
-            # cv2.imshow('Main', img)
-            # # cv2.imshow('YOLO res', vis_res)
-            # if cv2.waitKey(1) & 0xFF == ord('q'): 
-            #     break
+            for obj_name, pose in poses.items():
+                img = draw_axis(img, pose[:3, :3], pose[:3, 3], cam, obj_name)
+            cv2.imshow('Main', img)
+            # cv2.imshow('YOLO res', vis_res)
+            if cv2.waitKey(1) & 0xFF == ord('q'): 
+                break
             if len(poses) > 0:
+                obj_ids, obj_poses = [], []
                 for obj_name, pose in poses.items():
-                    obj = PoseStamped()
-                    obj.header.frame_id = f"zedm"
+                    obj_id = String()
+                    obj_id.data = f"{obj_name}"
+                    obj_ids.append(obj_id)
+
                     rot = pose[:3, :3]
                     pos = pose[:3, 3]
                     rot = Rotation.from_matrix(rot)
                     quat = rot.as_quat()
-                    obj.pose.position.x = pos[0]
-                    obj.pose.position.y = pos[1]
-                    obj.pose.position.z = pos[2]
-                    obj.pose.orientation.x = quat[0]
-                    obj.pose.orientation.y = quat[1]
-                    obj.pose.orientation.z = quat[2]
-                    obj.pose.orientation.w = quat[3]
-                    pubPose.publish(obj)
-
+                    obj_pose = Pose()
+                    obj_pose.position.x = pos[0]
+                    obj_pose.position.y = pos[1]
+                    obj_pose.position.z = pos[2]
+                    obj_pose.orientation.x = quat[0]
+                    obj_pose.orientation.y = quat[1]
+                    obj_pose.orientation.z = quat[2]
+                    obj_pose.orientation.w = quat[3]
+                    obj_poses.append(obj_pose)
+                    # pubPose.publish(obj)
+                idposearray.ids = obj_ids
+                idposearray.poses = obj_poses
+                pubPoses.publish(idposearray)
             #####---- publish the images with drawings on there -----#####
             pubImage.publish( br.cv2_to_imgmsg(img, encoding = "bgr8") )
 

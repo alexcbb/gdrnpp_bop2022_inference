@@ -4,7 +4,7 @@ import numpy as np
 import mmcv
 import itertools
 from einops import rearrange
-from lib.egl_renderer.egl_renderer_v3 import EGLRenderer
+# from lib.egl_renderer.egl_renderer_v3 import EGLRenderer
 from core.utils.camera_geometry import get_K_crop_resize
 from core.utils.data_utils import xyz_to_region_batch
 from lib.vis_utils.image import grid_show
@@ -266,8 +266,7 @@ def batch_data_inference_roi(cfg, data, device='cuda'):
     return batch
 
 
-def get_renderer(cfg, data_ref, obj_names, gpu_id=None):
-    """for rendering the targets (xyz) online."""
+"""def get_renderer(cfg, data_ref, obj_names, gpu_id=None):
     model_dir = data_ref.model_dir
 
     obj_ids = [data_ref.obj2id[_obj] for _obj in obj_names]
@@ -290,7 +289,7 @@ def get_renderer(cfg, data_ref, obj_names, gpu_id=None):
         use_cache=True,
     )
     return ren
-
+"""
 
 def get_out_coor(cfg, coor_x, coor_y, coor_z):
     if (coor_x.shape[1] == 1) and (coor_y.shape[1] == 1) and (coor_z.shape[1] == 1):

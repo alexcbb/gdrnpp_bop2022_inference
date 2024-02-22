@@ -34,6 +34,7 @@ from cv_bridge import CvBridge, CvBridgeError
 from scipy.spatial.transform import Rotation
 
 import mmcv
+import tf
 
 def preprocessing(outputs, image, extents, cam):
     """
@@ -360,7 +361,8 @@ if __name__ == '__main__':
         extents[idx] = np.array([size_x, size_y, size_z], dtype="float32")
         idx += 1
 
-    with open(osp.join(PROJ_ROOT,"datasets/BOP_DATASETS/ycbv/camera_cmu.json")) as f:
+    " The original camera settings are stored at `datasets/BOP_DATASETS/ycbv`"
+    with open(osp.join(PROJ_ROOT,"core/gdrn_modeling/camera_settings/camera_zed_tuda.json")) as f:
         camera_json = json.load(f)
         cam = np.asarray([
             [camera_json['fx'], 0., camera_json['cx']],
@@ -374,9 +376,12 @@ if __name__ == '__main__':
     # Define pub topic and init
     # Define array of strings and poses 
     pubPoses = rospy.Publisher('/liris/pose_estimation/poses', IDPoseArray, queue_size=10)
+    
     # pubPose = rospy.Publisher('/liris/pose_estimation/poses', PoseStamped, queue_size=10)
     pubImage = rospy.Publisher('/liris/pose_estimation/imageRGB', Image, queue_size=10)
     rospy.init_node('pose_estimator', anonymous=True)
+
+    tf_br = tf.TransformBroadcaster()
 
     imageHandler = ImageDataHandler()
     br = CvBridge()
@@ -425,18 +430,34 @@ if __name__ == '__main__':
                     rot = Rotation.from_matrix(rot)
                     quat = rot.as_quat()
                     obj_pose = Pose()
-                    obj_pose.position.x = pos[0]
-                    obj_pose.position.y = pos[1]
-                    obj_pose.position.z = pos[2]
+
+                    # rescale the position based on the given detph_scale
+                    position_vec = np.array([pos[0], pos[1], pos[2]])
+                    scaling_factor = depth_scale/ np.linalg.norm(position_vec)
+                    position_vec = scaling_factor * position_vec
+                    obj_pose.position.x = position_vec[0]
+                    obj_pose.position.y = position_vec[1]
+                    obj_pose.position.z = position_vec[2]
+
                     obj_pose.orientation.x = quat[0]
                     obj_pose.orientation.y = quat[1]
                     obj_pose.orientation.z = quat[2]
                     obj_pose.orientation.w = quat[3]
                     obj_poses.append(obj_pose)
                     # pubPose.publish(obj)
+
+                    tf_br.sendTransform(
+                        (obj_pose.position.x, obj_pose.position.y, obj_pose.position.z), 
+                        (obj_pose.orientation.x, obj_pose.orientation.y, obj_pose.orientation.z, obj_pose.orientation.w), 
+                        rospy.Time.now(), 
+                        obj_ids[-1].data, 
+                        imageRGB.header.frame_id
+                        )
+
                 idposearray.ids = obj_ids
                 idposearray.poses = obj_poses
                 pubPoses.publish(idposearray)
+                
             #####---- publish the images with drawings on there -----#####
             pubImage.publish( br.cv2_to_imgmsg(img, encoding = "bgr8") )
 

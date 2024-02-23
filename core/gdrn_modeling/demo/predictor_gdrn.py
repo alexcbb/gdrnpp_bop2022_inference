@@ -15,6 +15,7 @@ import datetime
 from core.gdrn_modeling.engine.engine_utils import get_out_mask, get_out_coor, batch_data_inference_roi
 from core.utils.my_checkpoint import MyCheckpointer
 from core.utils.data_utils import crop_resize_by_warp_affine, get_2d_coord_np
+from core.gdrn_modeling.engine.gdrn_evaluator import get_pnp_ransac_pose
 from lib.pysixd import inout
 from lib.utils.utils import iprint
 from lib.utils.time_utils import get_time_str
@@ -512,3 +513,48 @@ class GdrnPredictor():
         ####################################
         # cfg.freeze()
         return cfg
+
+
+    def postprocessing(self, data_dict, out_dict):
+        """
+        Postprocess the gdrn model outputs
+        Args:
+            data_dict: gdrn model preprocessed data
+            out_dict: gdrn model output
+        Returns:
+            dict: poses of objects
+        """
+        i_out = -1
+        data_dict["cur_res"] = []
+        for i_inst in range(len(data_dict["roi_img"])):
+            i_out += 1
+
+            cur_obj_id = self.obj_ids[int(data_dict["roi_cls"][i_out])]
+            cur_res = {
+                "obj_id": cur_obj_id,
+                "score": float(data_dict["score"][i_inst]),
+                "bbox_est": data_dict["bbox_est"][i_inst].detach().cpu().numpy(),  # xyxy
+            }
+            if self.cfg.TEST.USE_PNP:
+                pose_est_pnp = get_pnp_ransac_pose(self.cfg, data_dict, out_dict, i_inst, i_out)
+                cur_res["R"] = pose_est_pnp[:3, :3]
+                cur_res["t"] = pose_est_pnp[:3, 3]
+            else:
+                cur_res.update(
+                    {
+                        "R": out_dict["rot"][i_out].detach().cpu().numpy(),
+                        "t": out_dict["trans"][i_out].detach().cpu().numpy(),
+                    }
+                )
+            data_dict["cur_res"].append(cur_res)
+        if self.cfg.TEST.USE_DEPTH_REFINE:
+            self.process_depth_refine(data_dict, out_dict)
+
+        poses = {}
+        for res in data_dict["cur_res"]:
+            pose = np.eye(4)
+            pose[:3, :3] = res['R']
+            pose[:3, 3] = res['t']
+            poses[self.objs.get(res['obj_id'])] = pose
+
+        return poses

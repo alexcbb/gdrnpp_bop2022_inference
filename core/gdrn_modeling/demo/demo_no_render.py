@@ -173,55 +173,6 @@ def preprocessing(outputs, image, extents, cam):
 
     return batch
 
-def postprocessing(out_dict, objs, outputs):
-    """
-    Postprocess the gdrn model outputs
-    Args:
-        data_dict: gdrn model preprocessed data
-        out_dict: gdrn model output
-    Returns:
-        dict: poses of objects
-    """
-    boxes = outputs[0]
-    data_dict = {
-        "cur_res": [],
-    }
-    i_out = -1
-    for i_inst in range(len(boxes)):
-        box = boxes[i_inst].tolist()
-
-        i_out += 1
-
-        cur_res = {
-            "obj_id": objs[int(box[6])+1],
-            "score": box[4] * box[5],
-            "bbox_est": [box[0], box[1], box[2], box[3]],  # xyxy
-        }
-        #if cfg.TEST.USE_PNP:
-        #    pose_est_pnp = get_pnp_ransac_pose(cfg, data_dict, out_dict, i_inst, i_out)
-        #    cur_res["R"] = pose_est_pnp[:3, :3]
-        #    cur_res["t"] = pose_est_pnp[:3, 3]
-        #else:
-        cur_res.update(
-            {
-                "R": out_dict["rot"][i_out].detach() .cpu().numpy(),
-                "t": out_dict["trans"][i_out].detach().cpu().numpy(),
-            }
-        )
-        data_dict["cur_res"].append(cur_res)
-
-    # if cfg.TEST.USE_DEPTH_REFINE:
-    #     process_depth_refine(data_dict, out_dict)
-
-    poses = {}
-    for res in data_dict["cur_res"]:
-        pose = np.eye(4)
-        pose[:3, :3] = res['R']
-        pose[:3, 3] = res['t']
-        poses[res['obj_id']] = pose
-
-    return poses
-
 class ImageDataHandler:
     def __init__(self):
         self.imageRGB = Image
@@ -230,7 +181,7 @@ class ImageDataHandler:
 
         # Subscribe to topics
         ## Make a handle to both image topics and put them in a message filter
-        self.topicImageRGB = message_filters.Subscriber("/zedm/zed_node/rgb/image_rect_color", Image)
+        self.topicImageRGB = message_filters.Subscriber("/zedm/zed_node/right/image_rect_color", Image)
         self.topicImageDepth = message_filters.Subscriber("/zedm/zed_node/depth/depth_registered", Image)
 
         ## Use message filter to connect two callbacks to one function
@@ -270,7 +221,6 @@ def draw_axis(img, R, t, K, object_name):
     img = cv2.putText(img, object_name, org, font, fontScale, color, thickness, cv2.LINE_AA)
 
     return img
-
 
 if __name__ == '__main__':
     #image_paths = get_image_list(osp.join(PROJ_ROOT,"datasets/BOP_DATASETS/ycbv/test/000048/rgb"), osp.join(PROJ_ROOT,"datasets/BOP_DATASETS/ycbv/test/000048/depth"))
@@ -362,7 +312,7 @@ if __name__ == '__main__':
         idx += 1
 
     " The original camera settings are stored at `datasets/BOP_DATASETS/ycbv`"
-    with open(osp.join(PROJ_ROOT,"core/gdrn_modeling/camera_settings/camera_zed_tuda.json")) as f:
+    with open(osp.join(PROJ_ROOT,"core/gdrn_modeling/camera_settings/camera_zed_liris.json")) as f:
         camera_json = json.load(f)
         cam = np.asarray([
             [camera_json['fx'], 0., camera_json['cx']],
@@ -409,7 +359,7 @@ if __name__ == '__main__':
             outputs = yolo_predictor.inference(image=img)
             data_dict = preprocessing(outputs=outputs, image=img, extents=extents, cam=cam)
             out_dict = gdrn_predictor.inference(data_dict)
-            poses = postprocessing(out_dict, objs, outputs)# gdrn_predictor.postprocessing(data_dict, out_dict)
+            poses = gdrn_predictor.postprocessing(data_dict, out_dict)
 
             # Uncomment to visualize !
             for obj_name, pose in poses.items():
@@ -433,11 +383,11 @@ if __name__ == '__main__':
 
                     # rescale the position based on the given detph_scale
                     position_vec = np.array([pos[0], pos[1], pos[2]])
-                    scaling_factor = depth_scale/ np.linalg.norm(position_vec)
-                    position_vec = scaling_factor * position_vec
-                    obj_pose.position.x = position_vec[0]
-                    obj_pose.position.y = position_vec[1]
-                    obj_pose.position.z = position_vec[2]
+                    # scaling_factor = depth_scale/ np.linalg.norm(position_vec)
+                    # position_vec = scaling_factor * position_vec
+                    obj_pose.position.x = position_vec[0]+0.05
+                    obj_pose.position.y = position_vec[1]+0.05
+                    obj_pose.position.z = position_vec[2]-0.02
 
                     obj_pose.orientation.x = quat[0]
                     obj_pose.orientation.y = quat[1]

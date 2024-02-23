@@ -385,9 +385,9 @@ if __name__ == '__main__':
                     position_vec = np.array([pos[0], pos[1], pos[2]])
                     # scaling_factor = depth_scale/ np.linalg.norm(position_vec)
                     # position_vec = scaling_factor * position_vec
-                    obj_pose.position.x = position_vec[0]+0.05
+                    obj_pose.position.x = position_vec[0]+0.025
                     obj_pose.position.y = position_vec[1]+0.05
-                    obj_pose.position.z = position_vec[2]-0.02
+                    obj_pose.position.z = position_vec[2]
 
                     obj_pose.orientation.x = quat[0]
                     obj_pose.orientation.y = quat[1]

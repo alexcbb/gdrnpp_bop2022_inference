@@ -232,6 +232,7 @@ if __name__ == '__main__':
     gdrn_predictor = GdrnPredictor(
         config_file_path=osp.join(PROJ_ROOT,"configs/gdrn/ycbv/convnext_a6_AugCosyAAEGray_BG05_mlL1_DMask_amodalClipBox_classAware_ycbv.py"),
         ckpt_file_path=osp.join(PROJ_ROOT,"pretrained_models/model_final_wo_optim.pth"),
+        camera_json_path=osp.join(PROJ_ROOT,"core/gdrn_modeling/camera_settings/camera_zed_tuda.json"),
         path_to_obj_models=osp.join(PROJ_ROOT,"datasets/BOP_DATASETS/ycbv/models")
     )
 
@@ -312,7 +313,7 @@ if __name__ == '__main__':
         idx += 1
 
     " The original camera settings are stored at `datasets/BOP_DATASETS/ycbv`"
-    with open(osp.join(PROJ_ROOT,"core/gdrn_modeling/camera_settings/camera_zed_liris.json")) as f:
+    with open(osp.join(PROJ_ROOT,"core/gdrn_modeling/camera_settings/camera_zed_tuda.json")) as f:
         camera_json = json.load(f)
         cam = np.asarray([
             [camera_json['fx'], 0., camera_json['cx']],
@@ -383,10 +384,8 @@ if __name__ == '__main__':
 
                     # rescale the position based on the given detph_scale
                     position_vec = np.array([pos[0], pos[1], pos[2]])
-                    # scaling_factor = depth_scale/ np.linalg.norm(position_vec)
-                    # position_vec = scaling_factor * position_vec
-                    obj_pose.position.x = position_vec[0]+0.025
-                    obj_pose.position.y = position_vec[1]+0.05
+                    obj_pose.position.x = position_vec[0]
+                    obj_pose.position.y = position_vec[1]
                     obj_pose.position.z = position_vec[2]
 
                     obj_pose.orientation.x = quat[0]

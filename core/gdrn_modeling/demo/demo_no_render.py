@@ -36,6 +36,7 @@ from scipy.spatial.transform import Rotation
 import mmcv
 import tf
 
+
 def preprocessing(outputs, image, extents, cam):
     """
     Preprocessing detection model output and input image
@@ -223,6 +224,9 @@ def draw_axis(img, R, t, K, object_name):
     return img
 
 if __name__ == '__main__':
+    # Define your camera settings
+    camera_json_path = osp.join(PROJ_ROOT,"core/gdrn_modeling/camera_settings/camera_zed_tuda.json")
+
     #image_paths = get_image_list(osp.join(PROJ_ROOT,"datasets/BOP_DATASETS/ycbv/test/000048/rgb"), osp.join(PROJ_ROOT,"datasets/BOP_DATASETS/ycbv/test/000048/depth"))
     yolo_predictor = YoloPredictor(
                        config_file_path=osp.join(PROJ_ROOT,"configs/yolox/bop_pbr/yolox_x_640_augCozyAAEhsv_ranger_30_epochs_ycbv_real_pbr_ycbv_bop_test.py"),
@@ -232,7 +236,7 @@ if __name__ == '__main__':
     gdrn_predictor = GdrnPredictor(
         config_file_path=osp.join(PROJ_ROOT,"configs/gdrn/ycbv/convnext_a6_AugCosyAAEGray_BG05_mlL1_DMask_amodalClipBox_classAware_ycbv.py"),
         ckpt_file_path=osp.join(PROJ_ROOT,"pretrained_models/model_final_wo_optim.pth"),
-        camera_json_path=osp.join(PROJ_ROOT,"core/gdrn_modeling/camera_settings/camera_zed_tuda.json"),
+        camera_json_path=camera_json_path,
         path_to_obj_models=osp.join(PROJ_ROOT,"datasets/BOP_DATASETS/ycbv/models")
     )
 
@@ -313,7 +317,7 @@ if __name__ == '__main__':
         idx += 1
 
     " The original camera settings are stored at `datasets/BOP_DATASETS/ycbv`"
-    with open(osp.join(PROJ_ROOT,"core/gdrn_modeling/camera_settings/camera_zed_tuda.json")) as f:
+    with open(camera_json_path) as f:
         camera_json = json.load(f)
         cam = np.asarray([
             [camera_json['fx'], 0., camera_json['cx']],
